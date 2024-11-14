@@ -1,13 +1,15 @@
 #!/bin/bash
 
-# Scan a container image
-trivy image your-container-image:latest
+CONTAINER_IMAGE_NAME="${CONTAINER_IMAGE_NAME:-your-container-image:latest}"
 
-# Scan a container directory
+# Scan the container image
+trivy image "$CONTAINER_IMAGE_NAME"
+
+# Scan the container directory
 trivy fs your-container-directory
 
-# Scan a container image for OS vulnerabilities
-trivy image --security-checks vuln your-container-image:latest
+# Scan the container image for OS vulnerabilities
+trivy image --security-checks vuln "$CONTAINER_IMAGE_NAME"
 
-# Scan a container image for sensitive data
-trivy image --security-checks secret your-container-image:latest
+# Scan the container image for sensitive data
+trivy image --security-checks secret "$CONTAINER_IMAGE_NAME"
