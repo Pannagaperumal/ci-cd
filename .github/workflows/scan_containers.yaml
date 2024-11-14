@@ -18,6 +18,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y docker.io
     - name: Run Trivy Scan
+      env:
+        CONTAINER_IMAGE_NAME: my-test-container:latest
       run: |
         wget https://github.com/aquasecurity/trivy/releases/download/v0.32.0/trivy_0.32.0_Linux-64bit.deb
         sudo dpkg -i trivy_0.32.0_Linux-64bit.deb
