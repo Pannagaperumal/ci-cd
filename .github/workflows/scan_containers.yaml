@@ -19,8 +19,11 @@ jobs:
         sudo apt-get install -y docker-ce docker-ce-cli containerd.io
     - name: Run Trivy Scan
       env:
-        CONTAINER_IMAGE_NAME: my-test-container:latest
+        CONTAINER_IMAGE_NAME: your-container-image:latest
       run: |
         wget https://github.com/aquasecurity/trivy/releases/download/v0.32.0/trivy_0.32.0_Linux-64bit.deb
         sudo dpkg -i trivy_0.32.0_Linux-64bit.deb
-        ./scan_containers.sh
+        trivy image "$CONTAINER_IMAGE_NAME"
+        trivy fs your-container-directory
+        trivy image --security-checks vuln "$CONTAINER_IMAGE_NAME"
+        trivy image --security-checks secret "$CONTAINER_IMAGE_NAME"
