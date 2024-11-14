@@ -1,27 +1,26 @@
 name: Scan Containers
 
 on:
- push:
-   branches: [ "main" ]
- pull_request:
-   branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
 
- scan:
-   runs-on: ubuntu-latest
-   
-   steps:
-   - uses: actions/checkout@v3
-   - name: Set up Docker
-     run: |
-       sudo apt-get update
-       sudo apt-get remove -y containerd
-       sudo apt-get install -y docker.io containerd.io
-   - name: Run Trivy Scan
-     env:
-       CONTAINER_IMAGE_NAME: my-test-container:latest
-     run: |
-       wget https://github.com/aquasecurity/trivy/releases/download/v0.32.0/trivy_0.32.0_Linux-64bit.deb
-       sudo dpkg -i trivy_0.32.0_Linux-64bit.deb
-       ./scan_containers.sh
+  scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Docker
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+    - name: Run Trivy Scan
+      env:
+        CONTAINER_IMAGE_NAME: my-test-container:latest
+      run: |
+        wget https://github.com/aquasecurity/trivy/releases/download/v0.32.0/trivy_0.32.0_Linux-64bit.deb
+        sudo dpkg -i trivy_0.32.0_Linux-64bit.deb
+        ./scan_containers.sh
