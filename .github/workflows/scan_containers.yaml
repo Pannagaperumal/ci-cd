@@ -17,13 +17,28 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+        
+    - name: Download Trivy DB
+      run: |
+        sudo mkdir -p /tmp/trivy
+        sudo trivy filesystem --download-db-only --db-repository ghcr.io/aquasecurity/trivy-db --trivy-config /tmp/trivy
+        
     - name: Run Trivy Scan
       env:
-        CONTAINER_IMAGE_NAME: your-container-image:latest
+        CONTAINER_IMAGE_NAME: test-image:latest
+        TRIVY_CACHE_DIR: /tmp/trivy
       run: |
-        wget https://github.com/aquasecurity/trivy/releases/download/v0.32.0/trivy_0.32.0_Linux-64bit.deb
-        sudo dpkg -i trivy_0.32.0_Linux-64bit.deb
-        trivy image "$CONTAINER_IMAGE_NAME"
-        trivy fs your-container-directory
-        trivy image --security-checks vuln "$CONTAINER_IMAGE_NAME"
-        trivy image --security-checks secret "$CONTAINER_IMAGE_NAME"
+        trivy image "$CONTAINER_IMAGE_NAME" -f json -o trivy-results.json
+        trivy fs your-container-directory -f json -o trivy-fs-results.json
+        trivy image --security-checks vuln "$CONTAINER_IMAGE_NAME" -f json -o trivy-vuln-results.json
+        trivy image --security-checks secret "$CONTAINER_IMAGE_NAME" -f json -o trivy-secret-results.json
+        
+    - name: Upload Trivy Scan Results
+      uses: actions/upload-artifact@v3
+      with:
+        name: trivy-results
+        path: |
+          trivy-results.json
+          trivy-fs-results.json
+          trivy-vuln-results.json
+          trivy-secret-results.json
