@@ -33,30 +33,37 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TRIVY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        max_attempts=3
-        attempt=1
-        
-        while [ $attempt -le $max_attempts ]; do
-          echo "Attempt $attempt of $max_attempts"
-          
-          if trivy image \
+        function run_trivy_scan() {
+          trivy image \
             --cache-dir $TRIVY_CACHE_DIR \
             --format json \
             --output trivy-results.json \
             --timeout 10m \
-            --retry-count 3 \
             --scanners vuln,secret,config \
             --exit-code 0 \
-            "$CONTAINER_IMAGE_NAME"; then
+            "$CONTAINER_IMAGE_NAME"
+        }
+        
+        max_attempts=3
+        attempt=1
+        backoff_time=10
+        
+        while [ $attempt -le $max_attempts ]; do
+          echo "Attempt $attempt of $max_attempts"
+          
+          if run_trivy_scan; then
             echo "Scan completed successfully"
             break
           else
-            echo "Attempt $attempt failed"
+            echo "Attempt $attempt failed with exit code $?"
             if [ $attempt -eq $max_attempts ]; then
               echo "All attempts failed"
               exit 1
             fi
-            sleep $((attempt * 10))
+            # Exponential backoff with jitter
+            sleep_time=$((backoff_time * attempt + RANDOM % 5))
+            echo "Waiting ${sleep_time} seconds before next attempt..."
+            sleep $sleep_time
             ((attempt++))
           fi
         done
