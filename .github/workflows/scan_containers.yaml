@@ -25,56 +25,29 @@ jobs:
       run: |
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.3
         
-    - name: Run Trivy Scan with retry
+    - name: Run Trivy Scan
       env:
         CONTAINER_IMAGE_NAME: test-image:latest
         TRIVY_NO_PROGRESS: true
         TRIVY_CACHE_DIR: /tmp/trivy
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TRIVY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Use official mirror instead of ghcr.io
+        TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db
+        TRIVY_OFFLINE_SCAN: true
+        # Point to official mirror
+        TRIVY_DB_URL: https://download.aquasec.com/trivy-db.tar.gz
       run: |
-        function run_trivy_scan() {
-          trivy image \
-            --cache-dir $TRIVY_CACHE_DIR \
-            --format json \
-            --output trivy-results.json \
-            --timeout 10m \
-            --scanners vuln,secret,config \
-            --exit-code 0 \
-            "$CONTAINER_IMAGE_NAME"
-        }
+        # Download DB from mirror first
+        curl -sfL -o /tmp/trivy/db.tar.gz https://download.aquasec.com/trivy-db.tar.gz
+        tar xzf /tmp/trivy/db.tar.gz -C /tmp/trivy
         
-        max_attempts=3
-        attempt=1
-        backoff_time=10
-        
-        while [ $attempt -le $max_attempts ]; do
-          echo "Attempt $attempt of $max_attempts"
-          
-          if run_trivy_scan; then
-            echo "Scan completed successfully"
-            break
-          else
-            echo "Attempt $attempt failed with exit code $?"
-            if [ $attempt -eq $max_attempts ]; then
-              echo "All attempts failed"
-              exit 1
-            fi
-            # Exponential backoff with jitter
-            sleep_time=$((backoff_time * attempt + RANDOM % 5))
-            echo "Waiting ${sleep_time} seconds before next attempt..."
-            sleep $sleep_time
-            ((attempt++))
-          fi
-        done
-        
-    - name: Generate HTML report
-      if: always()
-      run: |
         trivy image \
-          --format template \
-          --template "@/usr/local/share/trivy/templates/html.tpl" \
-          --output trivy-results.html \
+          --cache-dir $TRIVY_CACHE_DIR \
+          --format json \
+          --output trivy-results.json \
+          --timeout 10m \
+          --scanners vuln,secret,config \
+          --skip-db-update \
+          --offline-scan \
           "$CONTAINER_IMAGE_NAME"
           
     - name: Upload scan results
@@ -82,7 +55,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: trivy-results
-        path: |
-          trivy-results.json
-          trivy-results.html
+        path: trivy-results.json
         retention-days: 5
