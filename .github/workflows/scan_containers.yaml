@@ -13,47 +13,34 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Set up Trivy cache
-      uses: actions/cache@v3
-      with:
-        path: /tmp/trivy
-        key: ${{ runner.os }}-trivy-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-trivy-
+    - name: Set up Docker
+      run: |
+        docker build -t test-image:latest .
     
-    - name: Install Trivy
-      run: |
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.3
-        
-    - name: Run Trivy Scan
-      env:
-        CONTAINER_IMAGE_NAME: test-image:latest
-        TRIVY_NO_PROGRESS: true
-        TRIVY_CACHE_DIR: /tmp/trivy
-        # Use official mirror instead of ghcr.io
-        TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db
-        TRIVY_OFFLINE_SCAN: true
-        # Point to official mirror
-        TRIVY_DB_URL: https://download.aquasec.com/trivy-db.tar.gz
-      run: |
-        # Download DB from mirror first
-        curl -sfL -o /tmp/trivy/db.tar.gz https://download.aquasec.com/trivy-db.tar.gz
-        tar xzf /tmp/trivy/db.tar.gz -C /tmp/trivy
-        
-        trivy image \
-          --cache-dir $TRIVY_CACHE_DIR \
-          --format json \
-          --output trivy-results.json \
-          --timeout 10m \
-          --scanners vuln,secret,config \
-          --skip-db-update \
-          --offline-scan \
-          "$CONTAINER_IMAGE_NAME"
-          
-    - name: Upload scan results
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'test-image:latest'
+        format: 'json'
+        output: 'trivy-results.json'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+        vuln-type: 'os,library'
+    
+    - name: Run Trivy filesystem scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'json'
+        output: 'trivy-fs-results.json'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+    
+    - name: Upload Trivy scan results
       if: always()
       uses: actions/upload-artifact@v3
       with:
         name: trivy-results
-        path: trivy-results.json
+        path: |
+          trivy-results.json
+          trivy-fs-results.json
         retention-days: 5
