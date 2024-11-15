@@ -7,35 +7,75 @@ on:
     branches: [ "main" ]
 
 jobs:
-
   scan:
     runs-on: ubuntu-latest
     
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Docker
+    
+    - name: Set up Trivy cache
+      uses: actions/cache@v3
+      with:
+        path: /tmp/trivy
+        key: ${{ runner.os }}-trivy-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-trivy-
+    
+    - name: Install Trivy
       run: |
-        sudo apt-get update
-        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.3
         
-    - name: Run Trivy Scan
+    - name: Run Trivy Scan with retry
       env:
         CONTAINER_IMAGE_NAME: test-image:latest
+        TRIVY_NO_PROGRESS: true
         TRIVY_CACHE_DIR: /tmp/trivy
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TRIVY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        wget https://github.com/aquasecurity/trivy/releases/download/v0.32.0/trivy_0.32.0_Linux-64bit.deb
-        sudo dpkg -i trivy_0.32.0_Linux-64bit.deb
-        trivy image "$CONTAINER_IMAGE_NAME" -f json -o trivy-results.json
-        trivy fs your-container-directory -f json -o trivy-fs-results.json
-        trivy image --security-checks vuln "$CONTAINER_IMAGE_NAME" -f json -o trivy-vuln-results.json
-        trivy image --security-checks secret "$CONTAINER_IMAGE_NAME" -f json -o trivy-secret-results.json
+        max_attempts=3
+        attempt=1
         
-    - name: Upload Trivy Scan Results
+        while [ $attempt -le $max_attempts ]; do
+          echo "Attempt $attempt of $max_attempts"
+          
+          if trivy image \
+            --cache-dir $TRIVY_CACHE_DIR \
+            --format json \
+            --output trivy-results.json \
+            --timeout 10m \
+            --retry-count 3 \
+            --scanners vuln,secret,config \
+            --exit-code 0 \
+            "$CONTAINER_IMAGE_NAME"; then
+            echo "Scan completed successfully"
+            break
+          else
+            echo "Attempt $attempt failed"
+            if [ $attempt -eq $max_attempts ]; then
+              echo "All attempts failed"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+            ((attempt++))
+          fi
+        done
+        
+    - name: Generate HTML report
+      if: always()
+      run: |
+        trivy image \
+          --format template \
+          --template "@/usr/local/share/trivy/templates/html.tpl" \
+          --output trivy-results.html \
+          "$CONTAINER_IMAGE_NAME"
+          
+    - name: Upload scan results
+      if: always()
       uses: actions/upload-artifact@v3
       with:
         name: trivy-results
         path: |
           trivy-results.json
-          trivy-fs-results.json
-          trivy-vuln-results.json
-          trivy-secret-results.json
+          trivy-results.html
+        retention-days: 5
